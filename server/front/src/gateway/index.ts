@@ -5,8 +5,11 @@ import { RedisClientType, RedisFunctions, RedisModules, RedisScripts } from 'red
 import { Server } from 'socket.io';
 import { TemplatedApp, App as uWsApp } from 'uWebSockets.js';
 
-import { TAccount } from '../typings';
+import { TAccount, TPlayerData } from '../typings';
 import ChatHandler from './handlers/chat';
+import { forEach } from 'lodash-es';
+
+const playerDataSet: { [username: string]: TPlayerData } = {};
 
 class GatewayServer extends Singleton {
   protected db: Client;
@@ -58,9 +61,20 @@ class GatewayServer extends Singleton {
       };
       console.log(`Connect: [${account.account}:${account.username}] connected`);
 
+      // 获取玩家数据
+      const playerData = playerDataSet[account.username];
       // 发送 account_connected 事件
       ++this.online;
-      io.emit('account_connected', account.username, this.online);
+      io.emit('account_connected', {
+        online: this.online,
+      });
+      socket.emit('account_data', {
+        account: {
+          username: account.username,
+          x: playerData?.x,
+          y: playerData?.y,
+        },
+      });
 
       // 还原消息
       socket.emit('messages', this.messages);
@@ -69,7 +83,37 @@ class GatewayServer extends Singleton {
         console.log(`Disconnect: [${account.account}:${account.username}] disconnected`);
         // 发送 account_disconnected 事件
         --this.online;
-        io.emit('account_disconnected', account.username, this.online);
+        io.emit('account_disconnected', {
+          username: account.username,
+          online: this.online,
+        });
+      });
+
+      socket.on('player-position', (data: { x: number; y: number }) => {
+        const account = socket.data.account;
+        playerDataSet[account.username] = { ...data, socketid: socket.id };
+        // 广播 player-position 事件
+        socket.broadcast.emit('player-position', {
+          username: account.username,
+          x: data.x,
+          y: data.y,
+        });
+      });
+
+      socket.on('restore-players', (cb: (data: any) => void) => {
+        // 还原玩家位置
+        const players: any = [];
+        forEach(playerDataSet, (playerData, username) => {
+          if (username === account.username) {
+            return;
+          }
+          players.push({
+            username,
+            x: playerData.x,
+            y: playerData.y,
+          });
+        });
+        cb(players);
       });
 
       ChatHandler(io, socket, this.messages);

@@ -53,7 +53,7 @@ const Chat = () => {
         ))}
       </div>
       <div className={styles.form}>
-        <input ref={refInput} type="text" placeholder="..."
+        <input ref={refInput} type="text"
             onKeyDown={e => {
               if (e.key === 'Enter') {
                 sendMessage(refInput.current?.value);

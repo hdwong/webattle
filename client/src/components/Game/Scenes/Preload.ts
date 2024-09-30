@@ -11,7 +11,7 @@ class Preload extends Phaser.Scene {
         const { name, image } = tileset;
         if (name && image) {
           // load image
-          this.load.image(name, `/map/${image}`);
+          this.load.image(`tile-${name}`, `/map/${image}`);
         }
       });
     }, this);

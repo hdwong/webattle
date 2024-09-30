@@ -11,12 +11,6 @@ const config: Types.Core.GameConfig = {
   backgroundColor: '#fff',
   pixelArt: true,
   roundPixels: true,
-  physics: {
-    default: 'arcade',
-    arcade: {
-      debug: true,
-    },
-  },
   scale: {
     mode: Scale.RESIZE,
     autoCenter: Scale.CENTER_BOTH,
@@ -33,10 +27,10 @@ const Map = () => {
   const refGame = useRef<Game | null>(null);
   const refMap = useRef<HTMLDivElement>(null);
 
-  const { account } = useGameContext();
+  const { account, socket } = useGameContext();
 
   useLayoutEffect(() => {
-    if (! refMap.current) {
+    if (! refMap.current || ! socket) {
       return;
     }
     const rect = refMap.current.getBoundingClientRect();
@@ -51,7 +45,26 @@ const Map = () => {
     EventEmitter.on('game-ready', () => {
       // 发送用户信息
       EventEmitter.emit('account', account);
+      // 请求还原玩家位置
+      socket.emit('restore-players', (data: any) => {
+        data.forEach((player: any) => {
+          EventEmitter.emit('player-update', {
+            username: player.username,
+            x: player.x << 5,
+            y: player.y << 5,
+          });
+        });
+      });
     }, this);
+    // 侦听 player-position 事件
+    EventEmitter.on('player-position', ({ x, y }: { x: number; y: number }) => {
+      // 更新玩家位置
+      socket.emit('player-position', { x: x >> 5, y: y >> 5 }); // 32px -> 1
+    }, this);
+    socket.on('player-position', ({ username, x, y }: { username: string; x: number; y: number }) => {
+      // 更新玩家位置
+      EventEmitter.emit('player-update', { username, x: x << 5, y: y << 5 }); // 1 -> 32px
+    });
 
     return () => {
       if (refGame.current) {
@@ -59,7 +72,7 @@ const Map = () => {
         EventEmitter.removeAllListeners();
       }
     };
-  }, [ refMap, account ]);
+  }, [ refMap, account, socket ]);
 
   return (
     <div ref={refMap} className={styles.map} />
