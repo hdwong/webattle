@@ -1,0 +1,33 @@
+{
+  "private": true,
+  "name": "webattle-server",
+  "version": "1.0.0",
+  "description": "Webattle game server",
+  "main": "build/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "npm run clean && tsc",
+    "clean": "rm -rf build"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "redis": "^4.7.0",
+    "socket.io": "^4.8.0",
+    "uWebSockets.js": "uNetworking/uWebSockets.js#v20.49.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.5.5",
+    "@types/pg": "^8.11.10",
+    "@types/ws": "^8.5.12",
+    "cors": "^2.8.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

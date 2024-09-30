@@ -1,0 +1,41 @@
+@import 'css/variable.scss';
+@import 'css/mixin.scss';
+
+.login-wrapper {
+  @include center;
+  width: 100%;
+  height: 100%;
+  background: url('/img/bg_test.jpg') no-repeat center;
+  background-image: -webkit-image-set(url('/img/bg_test.jpg') 1x,url('/img/bg_test@2x.jpg') 2x);
+  background-size: cover;
+  .logo {
+    @include center;
+    top: 25%;
+    width: 630px;
+    height: 630px;
+    background: url('/img/logo.png') no-repeat center;
+    background-image: -webkit-image-set(url('/img/logo.png') 1x,url('/img/logo@2x.png') 2x);
+    background-size: 100%;
+  }
+}
+.login {
+  @include center;
+  // top: 60%;
+  width: 300px;
+  background: rgba($color: #fff, $alpha: 0.75);
+  border: 2px solid #fcf6d9;
+  border-radius: 16px;
+  .form {
+    @include flexColumn(16px);
+    padding: 16px;
+    .username input {
+      letter-spacing: 2px;
+      &::placeholder {
+        letter-spacing: 0;
+      }
+    }
+    button {
+      cursor: inherit;
+    }
+  }
+}

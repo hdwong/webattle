@@ -1,0 +1,36 @@
+{
+  "name": "webattle",
+  "version": "1.0.0",
+  "author": "Bun Wong (hdwong)",
+  "private": true,
+  "scripts": {
+    "dev": "vite --config vite/config.dev.mjs",
+    "build": "vite build --config vite/config.prod.mjs"
+  },
+  "dependencies": {
+    "ahooks": "^3.8.1",
+    "lodash-es": "^4.17.21",
+    "phaser": "^3.85.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io-client": "^4.8.0"
+  },
+  "devDependencies": {
+    "@types/lodash-es": "^4.17.12",
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.7.0",
+    "@typescript-eslint/parser": "^8.7.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "classnames": "^2.5.1",
+    "css-loader": "^7.1.2",
+    "eslint": "^9.11.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.12",
+    "sass": "^1.79.3",
+    "style-loader": "^4.0.0",
+    "terser": "^5.33.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.7"
+  }
+}
