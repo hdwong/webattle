@@ -94,7 +94,7 @@ class MapScene extends Phaser.Scene {
             }
             this.timerAnims[username] = setTimeout(() => {
               target.anims.stop();
-              target.setFrame(0);
+              // target.setFrame(0);
             }, 200);
           },
         });
@@ -114,7 +114,7 @@ class MapScene extends Phaser.Scene {
         });
       } else {
         this.otherPlayerNames[username] = this.add.text(x + 16, y - 16, username, {
-              fontSize: 14,
+              fontSize: 12,
               color: '#fff',
               padding: {
                 x: 4,
@@ -153,7 +153,7 @@ class MapScene extends Phaser.Scene {
         this.move('down');
       } else {
         this.player?.anims.stop();
-        this.player?.setFrame(0);
+        // this.player?.setFrame(0);
       }
     }
     // 更新玩家名位置
@@ -231,8 +231,8 @@ class MapScene extends Phaser.Scene {
     });
     // 在玩家头顶显示用户名
     this.playerName = this.add.text(this.player!.x + 16, this.player!.y - 16, account.username, {
-          fontSize: 14,
-          color: '#fff',
+          fontSize: 12,
+          color: '#ff0',
           padding: {
             x: 4,
             y: 2,

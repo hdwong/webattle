@@ -7,4 +7,5 @@ export type TPlayerData = {
   socketid: string;
   x: number;
   y: number;
+  online: boolean;
 }

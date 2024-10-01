@@ -10,6 +10,7 @@ import ChatHandler from './handlers/chat';
 import { forEach } from 'lodash-es';
 
 const playerDataSet: { [username: string]: TPlayerData } = {};
+let timerSavePlayerData: NodeJS.Timeout | null = null;
 
 class GatewayServer extends Singleton {
   protected db: Client;
@@ -62,7 +63,17 @@ class GatewayServer extends Singleton {
       console.log(`Connect: [${account.account}:${account.username}] connected`);
 
       // 获取玩家数据
-      const playerData = playerDataSet[account.username];
+      let playerData = playerDataSet[account.username];
+      if (playerData) {
+        playerData.online = true;
+      } else {
+        // 从 redis 读取玩家数据
+        const playerDataStr = await redis.get(`player:${account.username}`);
+        if (playerDataStr) {
+          playerData = { ...JSON.parse(playerDataStr), socketid: socket.id, online: true };
+          playerDataSet[account.username] = playerData;
+        }
+      }
       // 发送 account_connected 事件
       ++this.online;
       io.emit('account_connected', {
@@ -87,11 +98,13 @@ class GatewayServer extends Singleton {
           username: account.username,
           online: this.online,
         });
+        // 更新玩家数据
+        playerDataSet[account.username] = { ...playerDataSet[account.username], online: false };
       });
 
       socket.on('player-position', (data: { x: number; y: number }) => {
         const account = socket.data.account;
-        playerDataSet[account.username] = { ...data, socketid: socket.id };
+        playerDataSet[account.username] = { ...data, socketid: socket.id, online: true };
         // 广播 player-position 事件
         socket.broadcast.emit('player-position', {
           username: account.username,
@@ -104,7 +117,8 @@ class GatewayServer extends Singleton {
         // 还原玩家位置
         const players: any = [];
         forEach(playerDataSet, (playerData, username) => {
-          if (username === account.username) {
+          if (username === account.username || ! playerData.online) {
+            // 不发送给自己, 不发送离线玩家
             return;
           }
           players.push({
@@ -135,11 +149,35 @@ class GatewayServer extends Singleton {
         console.log('Failed to listen to port', config.gateway.io.port);
       }
     });
+
+    // 每 5s 保存玩家数据到 redis
+    timerSavePlayerData = setInterval(() => {
+      this.savePlayerData();
+    }, 5000);
+  }
+
+  async savePlayerData() {
+    // 保存玩家数据 (x,y) 到 redis
+    forEach(playerDataSet, async (playerData, username) => {
+      if (! playerData.online) {
+        return;
+      }
+      await this.redis.set(`player:${username}`, JSON.stringify({
+        x: playerData.x,
+        y: playerData.y,
+      }));
+    });
   }
 
   async stop() {
     // 关闭服务器
     this.uWs.close();
+    // 清除定时器
+    if (timerSavePlayerData) {
+      clearInterval(timerSavePlayerData);
+    }
+    // 保存玩家数据到 redis
+    await this.savePlayerData();
   }
 }
 

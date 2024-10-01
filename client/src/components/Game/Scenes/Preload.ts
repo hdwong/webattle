@@ -4,7 +4,7 @@ class Preload extends Phaser.Scene {
   }
 
   preload() {
-    this.load.tilemapTiledJSON('map', '/map/map.json');
+    this.load.tilemapTiledJSON('map', '//localhost:9000/map.json');
     this.load.on('filecomplete-tilemapJSON-map', (_: string, __: string, data: any) => {
       // load tileset images
       data.tilesets.forEach((tileset: any) => {

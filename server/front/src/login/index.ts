@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { RedisClientType, RedisFunctions, RedisModules, RedisScripts } from 'redis';
 import { TAccount } from '../typings';
 import config from '../../config/config';
+import path from 'node:path';
 
 class LoginServer extends Singleton {
   protected port: number;
@@ -77,6 +78,11 @@ class LoginServer extends Singleton {
           message: '登录失败, 用户名或密码错误',
         });
       }
+    });
+
+    // 代理 /maps/map.json
+    app.get('/map.json', (_, res) => {
+      res.sendFile('map.json', { root: path.join(__dirname, '../../maps') });
     });
 
     app.use((_, res) => {
