@@ -36,7 +36,7 @@ const Game = () => {
       // 移除玩家
       EventEmitter.emit('player-remove', username);
     });
-    _socket.on('account_data', (data: any) => {
+    _socket.on('account-data', (data: any) => {
       setAccount && setAccount(data.account);
     });
 

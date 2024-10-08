@@ -8,6 +8,7 @@ import { TemplatedApp, App as uWsApp } from 'uWebSockets.js';
 import { TAccount, TPlayerData } from '../typings';
 import ChatHandler from './handlers/chat';
 import { forEach } from 'lodash-es';
+import AStar from '../utils/astar';
 
 const playerDataSet: { [username: string]: TPlayerData } = {};
 let timerSavePlayerData: NodeJS.Timeout | null = null;
@@ -19,6 +20,37 @@ class GatewayServer extends Singleton {
   protected uWs: TemplatedApp;
   protected online = 0;
   protected messages: Array<string> = [];
+  protected pathFinder: AStar;
+
+  protected init(): void {
+    // 读取地图数据, /maps/map.json
+    const mapJson = require('../../maps/map.json');
+    const mapLayer = mapJson.layers.find((layer: any) => layer.name === 'Path');
+    const { width, height, data: mapData } = mapLayer;
+    const tileset = mapJson.tilesets.find((tileset: any) => tileset.name === 'pathfinding_cost');
+    const { firstgid, tiles } = tileset;
+    const tileCosts: Record<number, number> = {};
+    tiles.forEach((tile: any) => {
+      tileCosts[tile.id] = tile.properties.find((prop: any) => prop.name === 'cost')?.value || 0;
+    });
+    // 把 mapData 的值都减去 firstgid, 找到对应的 tile 的 cost 设置后, 生成成 2D 数组
+    const mapGrid: number[][] = [];
+    for (let y = 0, i = 0; y < height; ++y) {
+      const row: number[] = [];
+      for (let x = 0; x < width; ++x, ++i) {
+        if (mapData[i] <= 0) {
+          // 默认值 0.5
+          row.push(0.5);
+        } else {
+          const index = mapData[i] - firstgid;
+          row.push(tileCosts[index] || 0.5);
+        }
+      }
+      mapGrid.push(row);
+    }
+    // 生成寻路器
+    this.pathFinder = new AStar(mapGrid);
+  }
 
   async start(db: Client, redis: RedisClientType<RedisModules, RedisFunctions, RedisScripts>) {
     this.db = db;
@@ -79,7 +111,13 @@ class GatewayServer extends Singleton {
       io.emit('account_connected', {
         online: this.online,
       });
-      socket.emit('account_data', {
+      // 广播 player-state-sync 事件
+      socket.broadcast.emit('player-state-sync', {
+        username: account.username,
+        x: playerData?.x,
+        y: playerData?.y,
+      });
+      socket.emit('account-data', {
         account: {
           username: account.username,
           x: playerData?.x,
@@ -102,11 +140,26 @@ class GatewayServer extends Singleton {
         playerDataSet[account.username] = { ...playerDataSet[account.username], online: false };
       });
 
-      socket.on('player-position', (data: { x: number; y: number }) => {
+      socket.on('player-move', (data: { x: number; y: number }) => {
         const account = socket.data.account;
+        if (typeof playerDataSet[account.username] === 'undefined' || ! playerDataSet[account.username].online) {
+          // 玩家不存在或离线
+          return;
+        }
+        const { x: ox, y: oy } = playerDataSet[account.username];
+        if (ox === data.x && oy === data.y) {
+          // 位置相同
+          return;
+        }
+        console.log(`Player move: [${account.account}:${account.username}], from (${ox},${oy}) to (${data.x},${data.y})`);
+        // 调用寻路器
+        const path = this.pathFinder.findPath([ox, oy], [data.x, data.y]);
+        // 返回路径, just for test
+        socket.emit('player-path', path);
+        // TODO 定时 100ms 逐步移动, 触发 player-state-sync 事件
         playerDataSet[account.username] = { ...data, socketid: socket.id, online: true };
-        // 广播 player-position 事件
-        socket.broadcast.emit('player-position', {
+        // 广播 player-state-sync 事件
+        io.emit('player-state-sync', {
           username: account.username,
           x: data.x,
           y: data.y,

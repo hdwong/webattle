@@ -8,7 +8,7 @@ import { EventEmitter } from './EventEmitter';
 
 const config: Types.Core.GameConfig = {
   type: AUTO,
-  backgroundColor: '#fff',
+  backgroundColor: '#000',
   pixelArt: true,
   roundPixels: true,
   scale: {
@@ -30,7 +30,7 @@ const Map = () => {
   const { account, socket } = useGameContext();
 
   useLayoutEffect(() => {
-    if (! refMap.current || ! socket) {
+    if (! refMap.current || ! account || ! socket) {
       return;
     }
     const rect = refMap.current.getBoundingClientRect();
@@ -48,7 +48,7 @@ const Map = () => {
       // 请求还原玩家位置
       socket.emit('restore-players', (data: any) => {
         data.forEach((player: any) => {
-          EventEmitter.emit('player-update', {
+          EventEmitter.emit('player-state-sync', {
             username: player.username,
             x: player.x << 5,
             y: player.y << 5,
@@ -61,15 +61,27 @@ const Map = () => {
       // 更新玩家位置
       socket.emit('player-position', { x: x >> 5, y: y >> 5 }); // 32px -> 1
     }, this);
-    socket.on('player-position', ({ username, x, y }: { username: string; x: number; y: number }) => {
-      // 更新玩家位置
-      EventEmitter.emit('player-update', { username, x: x << 5, y: y << 5 }); // 1 -> 32px
+    socket.on('player-state-sync', ({ username, x, y }: { username: string; x: number; y: number }) => {
+      // 玩家状态同步
+      EventEmitter.emit('player-state-sync', { username, x: x << 5, y: y << 5 }); // 1 -> 32px
     });
+    // 侦听 player-move 事件
+    EventEmitter.on('player-move', ({ x, y }: { x: number; y: number }) => {
+      // 发送移动请求
+      socket.emit('player-move', { x, y });
+    }, this);
+    // 侦听 player-path 事件
+    socket.on('player-path', (path: Array<[ number, number ]>) => {
+      // 显示路径
+      EventEmitter.emit('player-path', path);
+    })
 
     return () => {
       if (refGame.current) {
         refGame.current.destroy(true);
         EventEmitter.removeAllListeners();
+        socket.removeListener('player-state-sync');
+        socket.removeListener('player-path');
       }
     };
   }, [ refMap, account, socket ]);
