@@ -15,6 +15,7 @@ class MapScene extends Phaser.Scene {
   protected otherPlayerNames: { [username: string]: Phaser.GameObjects.Text } = {};
   protected timerAnims: Record<string, number> = {};
   protected timerMoveCursor: Phaser.Tweens.Tween | null = null;
+  protected timerCheckCursor: Phaser.Time.TimerEvent | null = null;
   protected pathGraphics: Phaser.GameObjects.Graphics | null = null;
   protected moveCursor: Phaser.GameObjects.Graphics | null = null;
   protected cursorPointerPosition: Phaser.Math.Vector2 | null = null;
@@ -37,6 +38,13 @@ class MapScene extends Phaser.Scene {
 
     // 增加鼠标移动事件, 以在 tilemap 上显示一个闪烁的光标
     this.input.on('pointermove', this.pointerMove, this);
+    // 增加一个 200ms 的计时器检查鼠标位置
+    this.timerCheckCursor = this.time.addEvent({
+      delay: 200,
+      callback: () => this.pointerMove(this.input.activePointer),
+      loop: true,
+      callbackScope: this,
+    });
     // 点击移动
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       const tilePoint = this.getPointerPosition(pointer);
@@ -73,22 +81,15 @@ class MapScene extends Phaser.Scene {
         if (target) {
           // 计算方向
           let direction = '';
-          if (target.x > x) {
-            direction = 'left';
-          } else if (target.x < x) {
-            direction = 'right';
-          } else if (target.y > y) {
-            direction = 'up';
-          } else if (target.y < y) {
-            direction = 'down';
+          const dx = Math.abs(target.x - x);
+          const dy = Math.abs(target.y - y);
+          if (dx > dy) {
+            direction = target.x > x ? 'left' : 'right';
+          } else {
+            direction = target.y > y ? 'up' : 'down';
           }
           // 停止动画
-          this.tweens.add({
-            targets: target,
-            x,
-            y,
-            duration: MOVE_DURATION,
-          });
+          this.tweens.add({ targets: target, x, y, duration: MOVE_DURATION });
           target.play(`move-${direction || 'down'}`, true);
           // 更新玩家名位置
           this.tweens.add({
@@ -152,7 +153,6 @@ class MapScene extends Phaser.Scene {
   }
 
   update() {
-    this.pointerMove(this.input.activePointer);
   }
 
   destroy() {
@@ -164,8 +164,13 @@ class MapScene extends Phaser.Scene {
       this.timerMoveCursor.destroy();
       this.timerMoveCursor = null;
     }
+    if (this.timerCheckCursor) {
+      this.timerCheckCursor.destroy();
+      this.timerCheckCursor = null;
+    }
   }
 
+  /* 渲染地图信息 */
   renderMap(account: TAccount) {
     const map = this.make.tilemap({ key: 'map' });
     this.map = map;
@@ -239,6 +244,7 @@ class MapScene extends Phaser.Scene {
         .startFollow(this.player!, true);
   }
 
+  /* 获取当前鼠标位置 */
   getPointerPosition(pointer: Phaser.Input.Pointer) {
     if (! this.map) {
       return null;
@@ -247,6 +253,7 @@ class MapScene extends Phaser.Scene {
     return this.map.worldToTileXY(worldPoint.x, worldPoint.y, true);
   }
 
+  /* 画鼠标移动指示器 */
   drawCursor(tilePoint: Phaser.Math.Vector2) {
     const x = tilePoint.x << 5;
     const y = tilePoint.y << 5;
@@ -290,6 +297,7 @@ class MapScene extends Phaser.Scene {
     });
   }
 
+  /* 鼠标移动 */
   pointerMove(pointer: Phaser.Input.Pointer) {
     const tilePoint = this.getPointerPosition(pointer);
     if (! tilePoint) {

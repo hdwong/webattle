@@ -222,8 +222,10 @@ class GatewayServer extends Singleton {
       }
       // 更新玩家数据
       playerDataSet[username] = { ...playerData, x, y };
-      // 广播 player-state-sync 事件
-      io.emit('player-state-sync', { username, x, y });
+      if (playerData.online) {
+        // 如果玩家在线, 广播 player-state-sync 事件
+        io.emit('player-state-sync', { username, x, y });
+      }
     });
 
     // 每 5s 保存玩家数据到 redis
