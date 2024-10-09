@@ -9,9 +9,11 @@ import { TAccount, TPlayerData } from '../typings';
 import ChatHandler from './handlers/chat';
 import { forEach } from 'lodash-es';
 import AStar from '../utils/astar';
+import { GameMove } from '../game';
 
 const playerDataSet: { [username: string]: TPlayerData } = {};
 let timerSavePlayerData: NodeJS.Timeout | null = null;
+const MOVE_DURATION = 200;
 
 class GatewayServer extends Singleton {
   protected db: Client;
@@ -21,6 +23,7 @@ class GatewayServer extends Singleton {
   protected online = 0;
   protected messages: Array<string> = [];
   protected pathFinder: AStar;
+  protected gameMove: GameMove;
 
   protected init(): void {
     // 读取地图数据, /maps/map.json
@@ -50,6 +53,7 @@ class GatewayServer extends Singleton {
     }
     // 生成寻路器
     this.pathFinder = new AStar(mapGrid);
+    this.gameMove = GameMove.getInstance();
   }
 
   async start(db: Client, redis: RedisClientType<RedisModules, RedisFunctions, RedisScripts>) {
@@ -147,6 +151,11 @@ class GatewayServer extends Singleton {
           return;
         }
         const { x: ox, y: oy } = playerDataSet[account.username];
+        if (typeof ox === 'undefined' || typeof oy === 'undefined') {
+          // 位置不存在, 直接使用当前位置
+          playerDataSet[account.username] = { ...playerDataSet[account.username], x: data.x, y: data.y };
+          return;
+        }
         if (ox === data.x && oy === data.y) {
           // 位置相同
           return;
@@ -155,15 +164,9 @@ class GatewayServer extends Singleton {
         // 调用寻路器
         const path = this.pathFinder.findPath([ox, oy], [data.x, data.y]);
         // 返回路径, just for test
-        socket.emit('player-path', path);
-        // TODO 定时 100ms 逐步移动, 触发 player-state-sync 事件
-        playerDataSet[account.username] = { ...data, socketid: socket.id, online: true };
-        // 广播 player-state-sync 事件
-        io.emit('player-state-sync', {
-          username: account.username,
-          x: data.x,
-          y: data.y,
-        });
+        // socket.emit('player-path', path);
+        // 设置玩家路径
+        this.gameMove.setPath(account.username, path);
       });
 
       socket.on('restore-players', (cb: (data: any) => void) => {
@@ -203,6 +206,26 @@ class GatewayServer extends Singleton {
       }
     });
 
+    this.gameMove.duration = MOVE_DURATION;
+    this.gameMove.addListener((username, x, y) => {
+      if (x === -1 && y === -1) {
+        // 移动结束
+        console.log(`GameMove: [${username}] move end`);
+        // 广播 player-state-sync 事件
+        io.emit('player-state-sync', { username, state: 'idle' });
+        return;
+      }
+      console.log(`GameMove: [${username}] move to (${x},${y})`);
+      const playerData = playerDataSet[username];
+      if (! playerData) {
+        return;
+      }
+      // 更新玩家数据
+      playerDataSet[username] = { ...playerData, x, y };
+      // 广播 player-state-sync 事件
+      io.emit('player-state-sync', { username, x, y });
+    });
+
     // 每 5s 保存玩家数据到 redis
     timerSavePlayerData = setInterval(() => {
       this.savePlayerData();
@@ -225,6 +248,8 @@ class GatewayServer extends Singleton {
   async stop() {
     // 关闭服务器
     this.uWs.close();
+    // 移除所有移动回调
+    this.gameMove.removeAllListeners();
     // 清除定时器
     if (timerSavePlayerData) {
       clearInterval(timerSavePlayerData);

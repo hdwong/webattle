@@ -61,9 +61,14 @@ const Map = () => {
       // 更新玩家位置
       socket.emit('player-position', { x: x >> 5, y: y >> 5 }); // 32px -> 1
     }, this);
-    socket.on('player-state-sync', ({ username, x, y }: { username: string; x: number; y: number }) => {
+    socket.on('player-state-sync', ({ username, x, y, state }: { username: string; x?: number; y?: number; state?: string }) => {
       // 玩家状态同步
-      EventEmitter.emit('player-state-sync', { username, x: x << 5, y: y << 5 }); // 1 -> 32px
+      if (state === 'idle') {
+        // 移动结束
+        EventEmitter.emit('player-state-sync', { username, state });
+      } else if (typeof x === 'number' && typeof y === 'number') {
+        EventEmitter.emit('player-state-sync', { username, x: x << 5, y: y << 5 }); // 1 -> 32px
+      }
     });
     // 侦听 player-move 事件
     EventEmitter.on('player-move', ({ x, y }: { x: number; y: number }) => {

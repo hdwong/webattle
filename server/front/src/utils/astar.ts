@@ -17,6 +17,8 @@ const MAX_COST = 9999;
 
 type TPoint = [ number, number ];
 
+export type TPath = Array<TPoint>;
+
 type TPointInfo = {
   x: number;
   y: number;
@@ -98,7 +100,7 @@ class AStar {
    * @param start 起点
    * @param end 终点
    */
-  public findPath(start: TPoint, end: TPoint): Array<TPoint> {
+  public findPath(start: TPoint, end: TPoint): TPath {
     // 初始化
     this.openList = {};
     this.closeList = {};
@@ -106,7 +108,7 @@ class AStar {
     // 计算
     this.calculate(start, end);
     // 返回路径
-    const path: Array<TPoint> = [];
+    const path: TPath = [];
     let key = this.getKey(end[0], end[1]);
     console.log(Object.keys(this.closeList).length);
     while (key !== this.getKey(start[0], start[1])) {

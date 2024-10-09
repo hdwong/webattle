@@ -60,7 +60,7 @@ const Chat = () => {
                 // 清空输入框
                 refInput.current!.value = '';
               }
-            }}/>
+            }} />
         <button onClick={() => {
           sendMessage(refInput.current?.value);
           // 清空输入框
