@@ -2,6 +2,14 @@ import { TAccount } from "@/typings";
 import { EventEmitter } from "../EventEmitter";
 import { forEach } from "lodash-es";
 
+import Dungeon from "./Dungeon";
+import City from "./City";
+
+const LOCATIONS_MAP: Record<string, any> = {
+  dungeon: Dungeon,
+  city: City,
+}
+
 const MOVE_DURATION = 200;
 
 class MapScene extends Phaser.Scene {
@@ -21,7 +29,7 @@ class MapScene extends Phaser.Scene {
   protected cursorPointerPosition: Phaser.Math.Vector2 | null = null;
 
   constructor() {
-    super({ key: 'MapScene' });
+    super({ key: 'main' });
   }
 
   create() {
@@ -48,7 +56,7 @@ class MapScene extends Phaser.Scene {
     // 点击移动
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       const tilePoint = this.getPointerPosition(pointer);
-      if (! tilePoint) {
+      if (! tilePoint || tilePoint.x >= this.map!.width || tilePoint.y >= this.map!.height) {
         return;
       }
       // 发送移动请求
@@ -72,7 +80,7 @@ class MapScene extends Phaser.Scene {
           }
           this.timerAnims[username] = setTimeout(() => {
             target.anims?.stop(); // 停止动画
-            target.setFrame(0);   // 回到正面
+            // target.setFrame(0);   // 回到正面
           }, MOVE_DURATION);
         }
       } else if (typeof x === 'number' && typeof y === 'number') {
@@ -120,6 +128,26 @@ class MapScene extends Phaser.Scene {
       }
     }, this);
 
+    // 切换场景
+    EventEmitter.on('location', ({ type, ...args }: any) => {
+      if (typeof LOCATIONS_MAP[type] !== 'undefined') {
+        if (this.scene.getIndex(type) === -1) {
+          // 如果不存在 location 的 Scene, 则创建
+          this.scene.add(type, LOCATIONS_MAP[type]);
+        }
+        // 延时 MOVE_DURATION ms 后跳转
+        this.time.delayedCall(MOVE_DURATION, () => {
+          // 如果存在 location 的 Scene, 则跳转
+          this.cameras.main.fadeOut(1000, 0, 0, 0)
+              .once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+                this.account!.x = args.x;
+                this.account!.y = args.y;
+                this.scene.start(type, args);
+              });
+        });
+      }
+    }, this);
+
     // 侦听 player-remove 事件
     EventEmitter.on('player-remove', (username: string) => {
       if (this.otherPlayers[username]) {
@@ -150,24 +178,53 @@ class MapScene extends Phaser.Scene {
         }
       }
     }, this);
+
+    // 卸载场景时, 清理资源
+    this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.timerCheckCursor) {
+        this.timerCheckCursor.destroy();
+        this.timerCheckCursor = null;
+      }
+      if (this.timerRefollow) {
+        clearTimeout(this.timerRefollow);
+        this.timerRefollow = null;
+      }
+      if (this.pathGraphics) {
+        this.pathGraphics.destroy();
+        this.pathGraphics = null;
+      }
+      if (this.moveCursor) {
+        this.moveCursor.destroy();
+        this.moveCursor = null;
+      }
+      this.input.off('pointermove', this.pointerMove, this);
+      this.input.off('pointerdown');
+      EventEmitter.removeListener('account');
+      EventEmitter.removeListener('player-state-sync');
+      EventEmitter.removeListener('player-remove');
+      EventEmitter.removeListener('player-path');
+      EventEmitter.removeListener('location');
+
+      if (this.map) {
+        this.map.destroy();
+        this.map = null;
+      }
+      if (this.player) {
+        this.player.destroy();
+        this.player = null;
+      }
+      if (this.playerName) {
+        this.playerName.destroy();
+        this.playerName = null;
+      }
+      forEach(this.otherPlayers, (player) => player.destroy());
+      this.otherPlayers = {};
+      forEach(this.otherPlayerNames, (playerName) => playerName.destroy());
+      this.otherPlayerNames = {};
+    });
   }
 
   update() {
-  }
-
-  destroy() {
-    if (this.timerRefollow) {
-      clearTimeout(this.timerRefollow);
-      this.timerRefollow = null;
-    }
-    if (this.timerMoveCursor) {
-      this.timerMoveCursor.destroy();
-      this.timerMoveCursor = null;
-    }
-    if (this.timerCheckCursor) {
-      this.timerCheckCursor.destroy();
-      this.timerCheckCursor = null;
-    }
   }
 
   /* 渲染地图信息 */
@@ -300,7 +357,7 @@ class MapScene extends Phaser.Scene {
   /* 鼠标移动 */
   pointerMove(pointer: Phaser.Input.Pointer) {
     const tilePoint = this.getPointerPosition(pointer);
-    if (! tilePoint) {
+    if (! tilePoint || tilePoint.x >= this.map!.width || tilePoint.y >= this.map!.height) {
       return;
     }
     if (this.cursorPointerPosition?.equals(tilePoint)) {

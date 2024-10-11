@@ -43,6 +43,7 @@ const Map = () => {
 
     // 侦听 game ready 事件
     EventEmitter.on('game-ready', () => {
+      console.log('game ready');
       // 发送用户信息
       EventEmitter.emit('account', account);
       // 请求还原玩家位置
@@ -70,6 +71,7 @@ const Map = () => {
         EventEmitter.emit('player-state-sync', { username, x: x << 5, y: y << 5 }); // 1 -> 32px
       }
     });
+    socket.on('location', (data: any) => EventEmitter.emit('location', data));
     // 侦听 player-move 事件
     EventEmitter.on('player-move', ({ x, y }: { x: number; y: number }) => {
       // 发送移动请求
@@ -87,9 +89,10 @@ const Map = () => {
         EventEmitter.removeAllListeners();
         socket.removeListener('player-state-sync');
         socket.removeListener('player-path');
+        socket.removeListener('location');
       }
     };
-  }, [ refMap, account, socket ]);
+  }, [ refMap.current, account, socket ]);
 
   return (
     <div ref={refMap} className={styles.map} />

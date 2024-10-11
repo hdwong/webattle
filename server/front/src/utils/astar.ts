@@ -101,6 +101,11 @@ class AStar {
    * @param end 终点
    */
   public findPath(start: TPoint, end: TPoint): TPath {
+    // 检查 start, end 都必须在 grid 内
+    if (start[0] < 0 || start[0] >= this.grid[0].length || start[1] < 0 || start[1] >= this.grid.length ||
+        end[0] < 0 || end[0] >= this.grid[0].length || end[1] < 0 || end[1] >= this.grid.length) {
+      return [];
+    }
     // 初始化
     this.openList = {};
     this.closeList = {};
@@ -110,7 +115,7 @@ class AStar {
     // 返回路径
     const path: TPath = [];
     let key = this.getKey(end[0], end[1]);
-    console.log(Object.keys(this.closeList).length);
+    // console.log(Object.keys(this.closeList).length);
     while (key !== this.getKey(start[0], start[1])) {
       const point = this.closeList[key];
       if (point.cost !== MAX_COST) {

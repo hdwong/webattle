@@ -1,7 +1,12 @@
 import { TPath } from "../utils/astar";
 import { Singleton } from "../utils/singleton";
 
-type TGameMoveListener = (username: string, x: number, y: number) => void;
+type TGameMoveListener = (arg: {
+  username: string;
+  x?: number;
+  y?: number;
+  end?: boolean;
+}) => void;
 
 class GameMove extends Singleton {
   protected paths: Record<string, TPath> = {};
@@ -44,31 +49,38 @@ class GameMove extends Singleton {
    * @param username 用户名
    * @param path 路径
    */
-  public setPath(username: string, path: TPath) {
+  public setPath(username: string, path: TPath, callback?: () => void) {
     this.paths[username] = path;
     if (this.timer[username]) {
       clearTimeout(this.timer[username]);
     }
     // 开始执行移动
-    this.move(username);
+    this.move(username, callback);
   }
 
-  protected move(username: string) {
+  protected move(username: string, callback?: () => void) {
     this.timer[username] = setTimeout(() => {
       const path = this.paths[username];
       if (! path || path.length === 0) {
         return;
       }
       const [ x, y ] = path.shift();
-      this.listeners.forEach(cb => cb(username, x, y));
+      this.listeners.forEach(cb => cb({ username, x, y }));
       if (path.length === 0) {
         // 结束
-        this.listeners.forEach(cb => cb(username, -1, -1));
+        this.listeners.forEach(cb => cb({
+          username,
+          x, y,
+          end: true,
+        }));
         delete this.paths[username];
         delete this.timer[username];
+        if (typeof callback === 'function') {
+          callback();
+        }
       } else {
         // 继续移动
-        this.move(username);
+        this.move(username, callback);
       }
     }, this._duration);
   }

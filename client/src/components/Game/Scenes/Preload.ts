@@ -49,7 +49,7 @@ class Preload extends Phaser.Scene {
       repeat: -1,
     });
 
-    this.scene.start('MapScene');
+    this.scene.start('main');
   }
 }
 

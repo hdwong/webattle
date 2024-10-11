@@ -11,7 +11,6 @@ import { forEach } from 'lodash-es';
 import AStar from '../utils/astar';
 import { GameMove } from '../game';
 
-const playerDataSet: { [username: string]: TPlayerData } = {};
 let timerSavePlayerData: NodeJS.Timeout | null = null;
 const MOVE_DURATION = 200;
 
@@ -24,6 +23,13 @@ class GatewayServer extends Singleton {
   protected messages: Array<string> = [];
   protected pathFinder: AStar;
   protected gameMove: GameMove;
+  protected locations: Record<string, {
+    x: number;
+    y: number;
+    name: string;
+    type: string;
+  }> = {};
+  protected playerDataSet: { [username: string]: TPlayerData } = {};
 
   protected init(): void {
     // 读取地图数据, /maps/map.json
@@ -54,6 +60,29 @@ class GatewayServer extends Singleton {
     // 生成寻路器
     this.pathFinder = new AStar(mapGrid);
     this.gameMove = GameMove.getInstance();
+    // 读取 Location 数据
+    const locationLayer = mapJson.layers.find((layer: any) => layer.name === 'Location');
+    if (locationLayer) {
+      locationLayer.objects.forEach((obj: any) => {
+        const x = obj.x >> 5;
+        const y = obj.y >> 5;
+        this.locations[`${x},${y}`] = {
+          x, y,
+          name: obj.name,
+          type: obj.type,
+        };
+      });
+    }
+    // 创建 10 个 Robot 玩家
+    for (let i = 0; i < 10; ++i) {
+      const username = `机器人-${i + 1}`;
+      this.playerDataSet[username] = {
+        x: 26,
+        y: 26,
+        online: true,
+        socketid: '',
+      };
+    }
   }
 
   async start(db: Client, redis: RedisClientType<RedisModules, RedisFunctions, RedisScripts>) {
@@ -99,15 +128,16 @@ class GatewayServer extends Singleton {
       console.log(`Connect: [${account.account}:${account.username}] connected`);
 
       // 获取玩家数据
-      let playerData = playerDataSet[account.username];
+      let playerData = this.playerDataSet[account.username];
       if (playerData) {
+        playerData.socketid = socket.id;
         playerData.online = true;
       } else {
         // 从 redis 读取玩家数据
         const playerDataStr = await redis.get(`player:${account.username}`);
         if (playerDataStr) {
           playerData = { ...JSON.parse(playerDataStr), socketid: socket.id, online: true };
-          playerDataSet[account.username] = playerData;
+          this.playerDataSet[account.username] = playerData;
         }
       }
       // 发送 account_connected 事件
@@ -141,19 +171,19 @@ class GatewayServer extends Singleton {
           online: this.online,
         });
         // 更新玩家数据
-        playerDataSet[account.username] = { ...playerDataSet[account.username], online: false };
+        this.playerDataSet[account.username] = { ...this.playerDataSet[account.username], online: false };
       });
 
       socket.on('player-move', (data: { x: number; y: number }) => {
         const account = socket.data.account;
-        if (typeof playerDataSet[account.username] === 'undefined' || ! playerDataSet[account.username].online) {
+        if (typeof this.playerDataSet[account.username] === 'undefined' || ! this.playerDataSet[account.username].online) {
           // 玩家不存在或离线
           return;
         }
-        const { x: ox, y: oy } = playerDataSet[account.username];
+        const { x: ox, y: oy } = this.playerDataSet[account.username];
         if (typeof ox === 'undefined' || typeof oy === 'undefined') {
           // 位置不存在, 直接使用当前位置
-          playerDataSet[account.username] = { ...playerDataSet[account.username], x: data.x, y: data.y };
+          this.playerDataSet[account.username] = { ...this.playerDataSet[account.username], x: data.x, y: data.y };
           return;
         }
         if (ox === data.x && oy === data.y) {
@@ -172,7 +202,7 @@ class GatewayServer extends Singleton {
       socket.on('restore-players', (cb: (data: any) => void) => {
         // 还原玩家位置
         const players: any = [];
-        forEach(playerDataSet, (playerData, username) => {
+        forEach(this.playerDataSet, (playerData, username) => {
           if (username === account.username || ! playerData.online) {
             // 不发送给自己, 不发送离线玩家
             return;
@@ -207,21 +237,43 @@ class GatewayServer extends Singleton {
     });
 
     this.gameMove.duration = MOVE_DURATION;
-    this.gameMove.addListener((username, x, y) => {
-      if (x === -1 && y === -1) {
+    this.gameMove.addListener(({ username, x, y, end }) => {
+      if (end) {
         // 移动结束
         console.log(`GameMove: [${username}] move end`);
         // 广播 player-state-sync 事件
-        io.emit('player-state-sync', { username, state: 'idle' });
+        io.emit('player-state-sync', {
+          username,
+          x, y,
+          state: 'idle',
+        });
+        // 检查 x, y 是否在 location 中
+        const location = this.locations[`${x},${y}`];
+        if (location) {
+          // 发送 location-enter 事件
+          const playerData = this.playerDataSet[username];
+          if (playerData && playerData.socketid) {
+            const socket = io.sockets.sockets.get(playerData.socketid);
+            if (socket) {
+              console.log(`Location: [${username}] enter (${location.type}:${location.name})`);
+              socket.emit('location', {
+                username,
+                x, y,
+                type: location.type,
+                name: location.name,
+              });
+            }
+          }
+        }
         return;
       }
-      console.log(`GameMove: [${username}] move to (${x},${y})`);
-      const playerData = playerDataSet[username];
+      // console.log(`GameMove: [${username}] move to (${x},${y})`);
+      const playerData = this.playerDataSet[username];
       if (! playerData) {
         return;
       }
       // 更新玩家数据
-      playerDataSet[username] = { ...playerData, x, y };
+      this.playerDataSet[username] = { ...playerData, x, y };
       if (playerData.online) {
         // 如果玩家在线, 广播 player-state-sync 事件
         io.emit('player-state-sync', { username, x, y });
@@ -232,11 +284,33 @@ class GatewayServer extends Singleton {
     timerSavePlayerData = setInterval(() => {
       this.savePlayerData();
     }, 5000);
+
+    // 随机移动 Robot 玩家
+    const randomMove = (username: string) => {
+      const dx = Math.floor(Math.random() * 50);
+      const dy = Math.floor(Math.random() * 50);
+      const { x, y } = this.playerDataSet[username];
+      const path = this.pathFinder.findPath([ x, y ], [ dx, dy ]);
+      if (path.length === 0) {
+        setTimeout(() => randomMove(username), 1000);
+      }
+      this.gameMove.setPath(username, path, () => {
+        setTimeout(() => randomMove(username), 1000);
+      });
+    };
+    setTimeout(() => {
+      Object.keys(this.playerDataSet).forEach(username => {
+        if (this.playerDataSet[username].socketid) {
+          return;
+        }
+        randomMove(username);
+      });
+    }, 3000);
   }
 
   async savePlayerData() {
     // 保存玩家数据 (x,y) 到 redis
-    forEach(playerDataSet, async (playerData, username) => {
+    forEach(this.playerDataSet, async (playerData, username) => {
       if (! playerData.online) {
         return;
       }
